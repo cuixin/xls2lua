@@ -92,11 +92,12 @@ func initConfigs() {
 type xlsField struct {
 	name  string // 字段名称
 	fType string // 字段类型, number, bool, string, array
+	cORs  byte   // 输出类型，0(默认全部输出), 1 客户端, 2服务器
 }
 
 func parseField(s string) *xlsField {
 	args := strings.Split(s, fieldInfoSplit)
-	if len(args) != 2 {
+	if len(args) < 2 {
 		return nil
 	}
 	name := strings.TrimSpace(args[0])
@@ -105,14 +106,21 @@ func parseField(s string) *xlsField {
 	}
 	t := strings.ToLower(args[1])
 	switch t {
-	case "number":
-	case "bool":
-	case "string":
-	case "array":
+	case "number", "bool", "string", "array":
 	default:
 		return nil
 	}
-	return &xlsField{name, t}
+	cORs := byte(0)
+	if len(args) > 2 {
+		cORsStr := strings.ToLower(args[2])
+		switch cORsStr {
+		case "c":
+			cORs = 1
+		case "s":
+			cORs = 2
+		}
+	}
+	return &xlsField{name, t, cORs}
 }
 
 func parseHeader(src string, headRow []*xlsx.Cell) (fields []*xlsField, headerSize int) {
@@ -162,11 +170,14 @@ func fixedBoolType(cell string) string {
 	}
 }
 
-func parseRow(fields []*xlsField, cells []*xlsx.Cell) (error, string) {
+func parseRow(fields []*xlsField, cORs byte, cells []*xlsx.Cell) (error, string) {
 	values := make([]string, 0, 128)
 	idValue := ""
 	for i, f := range fields {
 		if f != nil {
+			if cORs != 0 && f.cORs != 0 && f.cORs != cORs {
+				continue
+			}
 			cellStr := cells[i].Value
 			var writeValue string
 			switch f.fType {
@@ -188,13 +199,13 @@ func parseRow(fields []*xlsField, cells []*xlsx.Cell) (error, string) {
 	if idValue == "" {
 		return fmt.Errorf("没有主键"), ""
 	}
-	return nil, fmt.Sprintf("data[%v]={ %s }", idValue, strings.Join(values, fieldDelimiter))
+	return nil, fmt.Sprintf("[%v]={ %s }", idValue, strings.Join(values, fieldDelimiter))
 }
 
-// typ 1: all
+// typ 0: all
+// typ 1: client
 // typ 2: server
-// typ 3: client
-func xls2lua(fileName string, w writeFunc) bool {
+func xls2lua(fileName string, cORs byte, w writeFunc) bool {
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -207,7 +218,7 @@ func xls2lua(fileName string, w writeFunc) bool {
 	}
 	buf := make([]byte, 0, 4096)
 	buffer := bytes.NewBuffer(buf)
-	buffer.WriteString("local data = {}\n")
+	buffer.WriteString("return {\n")
 	sheet := xlFile.Sheets[0] // 只读第一个Sheet
 	fields, fieldSize := parseHeader(fileName, sheet.Rows[1].Cells)
 	rows := sheet.Rows[2:] // 忽略前两列（第一列，策划描述，第二列定义程序用的格式）
@@ -216,14 +227,14 @@ func xls2lua(fileName string, w writeFunc) bool {
 			fmt.Printf("输出失败[%s][字段数量少于标题数量], 错误在第[%d]行!\n", fileName, err, rindex+2+1)
 			return false
 		}
-		err, line := parseRow(fields, row.Cells)
+		err, line := parseRow(fields, cORs, row.Cells)
 		if err != nil {
 			fmt.Printf("输出失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2+1)
 			return false
 		}
-		buffer.WriteString(line + "\n")
+		buffer.WriteString(line + ",\n")
 	}
-	buffer.WriteString("return data")
+	buffer.WriteString("}")
 	err = w(fileName, buffer.Bytes())
 	if err != nil {
 		fmt.Printf("写入文件失败[%s][%v]!\n", fileName, err)
@@ -264,11 +275,11 @@ func findInArray(s string, strs []string) bool {
 	return false
 }
 
-func outTables(tables []string, w writeFunc) {
+func outTables(tables []string, cORs byte, w writeFunc) {
 	wg = &sync.WaitGroup{}
 	for _, v := range tables {
 		wg.Add(1)
-		go xls2lua(v, w)
+		go xls2lua(v, cORs, w)
 	}
 	wg.Wait()
 }
@@ -290,14 +301,16 @@ start:
 		printTabs []string
 		wFunc     writeFunc
 	)
+	cORs := byte(0)
 	switch i {
 	case 1:
 		printTabs = mergeArrays(config.Clients, config.Servers)
-		wFunc = writeAllFunc
 	case 2:
+		cORs = 2
 		printTabs = mergeArrays(config.Servers)
 		wFunc = writeServerFunc
 	case 3:
+		cORs = 1
 		printTabs = mergeArrays(config.Clients)
 		wFunc = writeClientFunc
 	}
@@ -312,9 +325,18 @@ tabSelect:
 		fmt.Println("请输入表格名称:")
 		goto tabSelect
 	} else {
-		if !xls2lua(tab, wFunc) {
-			fmt.Println("请输入表格名称:")
-			goto tabSelect
+		switch cORs {
+		case 0:
+			if !xls2lua(tab, 1, writeClientFunc) {
+				fmt.Println("客户端表格输出失败")
+			}
+			if !xls2lua(tab, 2, writeServerFunc) {
+				fmt.Println("服务端表格输出失败")
+			}
+		default:
+			if !xls2lua(tab, cORs, wFunc) {
+				fmt.Println("表格输出失败")
+			}
 		}
 	}
 }
@@ -330,11 +352,12 @@ start:
 	fmt.Scan(&i)
 	switch i {
 	case 1:
-		outTables(mergeArrays(config.Servers, config.Clients), writeAllFunc)
+		outTables(mergeArrays(config.Clients), 1, writeClientFunc)
+		outTables(mergeArrays(config.Servers), 2, writeServerFunc)
 	case 2:
-		outTables(mergeArrays(config.Servers), writeServerFunc)
+		outTables(mergeArrays(config.Servers), 2, writeServerFunc)
 	case 3:
-		outTables(mergeArrays(config.Clients), writeClientFunc)
+		outTables(mergeArrays(config.Clients), 1, writeClientFunc)
 	case 4:
 		outOneTable()
 	default:
