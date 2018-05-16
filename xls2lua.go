@@ -224,7 +224,7 @@ func xls2lua(fileName string, cORs byte, w writeFunc) bool {
 	rows := sheet.Rows[2:] // 忽略前两列（第一列，策划描述，第二列定义程序用的格式）
 	for rindex, row := range rows {
 		if len(row.Cells) < fieldSize {
-			fmt.Printf("输出失败[%s][字段数量少于标题数量], 错误在第[%d]行!\n", fileName, err, rindex+2+1)
+			fmt.Printf("输出失败[%s][字段数量少于标题数量], 错误在第[%d]行!\n", fileName, rindex+2+1)
 			return false
 		}
 		err, line := parseRow(fields, cORs, row.Cells)
