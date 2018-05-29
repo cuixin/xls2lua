@@ -158,7 +158,11 @@ func fixedFloatType(cell string) string {
 			return newValue
 		}
 	}
-	return cell
+	if cell == "" {
+		return "0"
+	} else {
+		return cell
+	}
 }
 
 func fixedBoolType(cell string) string {
