@@ -1,8 +1,7 @@
 # Excel to Lua
-First row will be ignored, this row used for designer's description.
+The first row will be ignored, this row is used for designer's description.
 
-
-The second row used for generate lua field.
+The second row is used for the generated Lua's field.
 
 Support field types:
 1. number
@@ -10,7 +9,7 @@ Support field types:
 3. array
 4. bool
 
-If you want ignored the field, use hyphen character(-).
+If you want to ignore the field, use the hyphen character(-).
 
 Example:
 ```
