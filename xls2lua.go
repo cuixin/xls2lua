@@ -227,13 +227,17 @@ func xls2lua(fileName string, cORs byte, w writeFunc) bool {
 	fields, fieldSize := parseHeader(fileName, sheet.Rows[1].Cells)
 	rows := sheet.Rows[2:] // 忽略前两列（第一列，策划描述，第二列定义程序用的格式）
 	for rindex, row := range rows {
-		if len(row.Cells) < fieldSize {
-			fmt.Printf("输出失败[%s][字段数量少于标题数量], 错误在第[%d]行!\n", fileName, rindex+2+1)
+		cellLen := len(row.Cells)
+		if cellLen == 0 { // 有空行就结束了
+			break
+		}
+		if cellLen < fieldSize {
+			fmt.Printf("[%s]字段数量不匹配,标题数量[%d], 当前[%d]行的字段数量[%d]!\n", fileName, fieldSize, rindex+2, len(row.Cells))
 			return false
 		}
 		err, line := parseRow(fields, cORs, row.Cells)
 		if err != nil {
-			fmt.Printf("输出失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2+1)
+			fmt.Printf("解析失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2)
 			return false
 		}
 		buffer.WriteString(line + ",\n")
