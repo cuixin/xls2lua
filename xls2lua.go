@@ -152,7 +152,7 @@ func parseRow(fields []*xlsField, cells []*xlsx.Cell) (error, string) {
 			if idValue == "" {
 				idValue = writeValue
 			}
-			values = append(values, fmt.Sprintf("%v=%v", f.name, writeValue))
+			values = append(values, fmt.Sprintf(`["%v"]=%v`, f.name, writeValue))
 		}
 	}
 	if idValue == "" {
