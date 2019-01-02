@@ -63,22 +63,22 @@ type xlsField struct {
 	fType string // 字段类型, number, bool, string, any
 }
 
-func parseField(s string) *xlsField {
+func parseField(s string) (*xlsField, error) {
 	args := strings.Split(s, fieldInfoSplit)
 	if len(args) < 2 {
-		return nil
+		return nil, fmt.Errorf("解析字段错误,没有用:分割.例如fieldName:number [%v]", s)
 	}
 	name := strings.TrimSpace(args[0])
 	if name == "" {
-		return nil
+		return nil, fmt.Errorf("解析字段为空")
 	}
 	t := strings.ToLower(args[1])
 	switch t {
 	case "number", "bool", "string", "array":
 	default:
-		return nil
+		return nil, fmt.Errorf("解析字段类型出错,不是number,bool,string,array")
 	}
-	return &xlsField{name, t}
+	return &xlsField{name, t}, nil
 }
 
 func parseHeader(src string, headRow []*xlsx.Cell) (fields []*xlsField, headerSize int) {
@@ -86,10 +86,10 @@ func parseHeader(src string, headRow []*xlsx.Cell) (fields []*xlsField, headerSi
 	for i, cell := range headRow {
 		fieldString := cell.Value
 		fieldString = strings.TrimSpace(fieldString)
-		if fieldString != "-" {
-			field := parseField(fieldString)
+		if fieldString != "" && fieldString != "-" {
+			field, err := parseField(fieldString)
 			if field == nil {
-				panic(fmt.Errorf("[%s]标题头格式问题, [number, bool, string, array]", src))
+				panic(fmt.Errorf("[%s]标题头格式问题[%s], [number, bool, string, array] [%v]", src, fieldString, err))
 			}
 			fields[i] = field
 			headerSize++
