@@ -168,7 +168,9 @@ func xls2lua(fileName string) bool {
 	if wg != nil {
 		defer wg.Done()
 	}
-	defer fmt.Println(sb.String())
+	defer func(s *strings.Builder) {
+		fmt.Printf(s.String())
+	}(sb)
 	xlFile, err := xlsx.OpenFile(excelDir + fileName + xlsxExtension)
 	if err != nil {
 		if wg != nil {
