@@ -23,6 +23,7 @@ const (
 
 var (
 	wg       *sync.WaitGroup
+	confDir  string // 配置文件目录
 	excelDir string // Excel目录
 	luaOut   string // 输出目录
 	luaFiles []string
@@ -39,7 +40,7 @@ func writeLuaFile(fileName string, text []byte) error {
 }
 
 func initConfigs() {
-	file, err := os.Open("config")
+	file, err := os.Open(confDir)
 	if err != nil {
 		panic(err)
 	}
@@ -162,13 +163,16 @@ func parseRow(fields []*xlsField, cells []*xlsx.Cell) (error, string) {
 }
 
 func xls2lua(fileName string) bool {
+	sb := &strings.Builder{}
+	sb.WriteString(fmt.Sprintf("开始处理[%s]\n", fileName))
 	if wg != nil {
 		defer wg.Done()
 	}
+	defer fmt.Println(sb.String())
 	xlFile, err := xlsx.OpenFile(excelDir + fileName + xlsxExtension)
 	if err != nil {
 		if wg != nil {
-			fmt.Printf("错误！没有找到[%v][%v]\n", fileName, err)
+			sb.WriteString(fmt.Sprintf("错误！没有找到[%v][%v]\n", fileName, err))
 		}
 		return false
 	}
@@ -184,12 +188,12 @@ func xls2lua(fileName string) bool {
 			break
 		}
 		if cellLen < fieldSize {
-			fmt.Printf("[%s]字段数量不匹配,标题数量[%d], 当前[%d]行的字段数量[%d]!\n", fileName, fieldSize, rindex+2, len(row.Cells))
+			sb.WriteString(fmt.Sprintf("[%s]字段数量不匹配,标题数量[%d], 当前[%d]行的字段数量[%d]!\n", fileName, fieldSize, rindex+2, len(row.Cells)))
 			return false
 		}
 		err, line := parseRow(fields, row.Cells)
 		if err != nil {
-			fmt.Printf("解析失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2)
+			sb.WriteString(fmt.Sprintf("解析失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2))
 			return false
 		}
 		buffer.WriteString(line + ",\n")
@@ -197,10 +201,10 @@ func xls2lua(fileName string) bool {
 	buffer.WriteString("}")
 	err = writeLuaFile(fileName, buffer.Bytes())
 	if err != nil {
-		fmt.Printf("写入文件失败[%s][%v]!\n", fileName, err)
+		sb.WriteString(fmt.Sprintf("写入文件失败[%s][%v]!\n", fileName, err))
 		return false
 	}
-	fmt.Printf("写入[%s]成功!\n", fileName)
+	sb.WriteString(fmt.Sprintf("写入[%s]成功!\n", fileName))
 	return true
 }
 
@@ -223,7 +227,6 @@ func findInArray(s string, strs []string) bool {
 func outTables() {
 	wg = &sync.WaitGroup{}
 	for _, v := range luaFiles {
-		fmt.Println("line", v)
 		wg.Add(1)
 		go xls2lua(v)
 	}
@@ -269,6 +272,7 @@ start:
 func init() {
 	flag.StringVar(&excelDir, "e", "./excel", "excel directory")
 	flag.StringVar(&luaOut, "o", "./gameconf", "lua output directory")
+	flag.StringVar(&confDir, "c", "./config", "config file path")
 	flag.Parse()
 }
 
