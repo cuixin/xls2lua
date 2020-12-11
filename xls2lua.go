@@ -139,6 +139,9 @@ func parseRow(fields []*xlsField, cells []*xlsx.Cell) (error, string, string) {
 	var keyValue string
 	for i, f := range fields {
 		if f != nil {
+			if i >= len(cells) {
+				return fmt.Errorf("字段数量不匹配,第[%d]列为空", i+1), "", ""
+			}
 			cellStr := cells[i].Value
 			var writeValue string
 			switch f.fType {
@@ -199,15 +202,15 @@ func xls2lua(fileName string) bool {
 			return false
 		}
 		err, line, mainKeyValue := parseRow(fields, row.Cells)
+		if err != nil {
+			sb.WriteString(fmt.Sprintf("解析失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2))
+			return false
+		}
 		if lastLineNum, ok := mainKeySet[mainKeyValue]; ok {
 			sb.WriteString(fmt.Sprintf("解析失败,相同的key重复出现[%s], 主键[%s], 之前行数[%v], 错误在第[%d]行!\n", fileName, mainKeyValue, lastLineNum, rindex+2))
 			return false
 		}
 		mainKeySet[mainKeyValue] = rindex + 2
-		if err != nil {
-			sb.WriteString(fmt.Sprintf("解析失败[%s][%v], 错误在第[%d]行!\n", fileName, err, rindex+2))
-			return false
-		}
 		buffer.WriteString(line + ",\n")
 	}
 	buffer.WriteString("}")
